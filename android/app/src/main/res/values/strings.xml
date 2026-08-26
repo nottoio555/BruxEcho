@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">BruxEcho</string>
+
+    <!-- Home / idle -->
+    <string name="home_start_button">เริ่มบันทึกการนอน</string>
+    <string name="home_nights_recorded">คืนที่บันทึกแล้ว: %1$d</string>
+    <string name="home_free_space">พื้นที่ว่าง: %1$s</string>
+    <string name="home_low_space_warning">พื้นที่เหลือน้อย (ต่ำกว่า 5 GB) การบันทึกอาจถูกตัดกลางคัน</string>
+
+    <!-- Recording -->
+    <string name="recording_stop_button">หยุดบันทึก</string>
+    <string name="recording_status_format">%1$s · WAV · %2$s · %3$s</string>
+    <string name="recording_privacy_banner">เสียงประมวลผลในเครื่องเท่านั้น ไม่ส่งออกไปที่ใด</string>
+
+    <!-- Notification -->
+    <string name="notification_channel_name">การบันทึกเสียงนอน</string>
+    <string name="notification_title">BruxEcho กำลังบันทึกเสียง</string>
+    <string name="notification_stop_action">หยุด</string>
+
+    <!-- Permissions -->
+    <string name="permission_denied_message">ต้องอนุญาตไมโครโฟนก่อนจึงจะบันทึกได้</string>
+
+    <!-- Mic check screen -->
+    <string name="miccheck_title">ตรวจสอบไมโครโฟน</string>
+    <string name="miccheck_intro">อัดเสียงทดสอบ 5 วินาที เพื่อตรวจว่าย่านความถี่สูง (8-16 kHz) ไม่ถูกตัดทิ้งโดย DSP ของเครื่อง</string>
+    <string name="miccheck_start_button">เริ่มทดสอบ 5 วินาที</string>
+    <string name="miccheck_recording">กำลังอัดเสียงทดสอบ…</string>
+    <string name="miccheck_analyzing">กำลังวิเคราะห์…</string>
+    <string name="miccheck_result_source">Audio source ที่ใช้จริง: %1$s</string>
+    <string name="miccheck_result_sample_rate">Sample rate: ขอ %1$d Hz ได้จริง %2$d Hz</string>
+    <string name="miccheck_result_band_energy">พลังงานย่าน 8-16 kHz: %1$.1f%% ของพลังงานรวม</string>
+    <string name="miccheck_warning_dsp">⚠ พลังงานย่าน 8-16 kHz ต่ำผิดปกติ — DSP ของเครื่องอาจยังกรองความถี่สูงอยู่ แม้ตั้งค่า UNPROCESSED แล้ว</string>
+    <string name="miccheck_ok">✓ พบพลังงานย่าน 8-16 kHz ชัดเจน ไม่ถูกกรองทิ้ง</string>
+    <string name="miccheck_failed">ไม่สามารถเปิดไมโครโฟนเพื่อทดสอบได้ ตรวจสอบว่าอนุญาตสิทธิ์ไมโครโฟนแล้ว</string>
+    <string name="miccheck_back">ย้อนกลับ</string>
+
+    <!-- Battery settings -->
+    <string name="battery_section_title">การตั้งค่าแบตเตอรี่ (สำคัญสำหรับ Samsung)</string>
+    <string name="battery_section_body">Samsung ปิดแอปพื้นหลังดุกว่าเครื่องอื่น ถ้าไม่ตั้งค่าเพิ่ม แอปอาจถูกฆ่ากลางดึก ไปที่ Settings → Battery → Background usage limits → เพิ่ม BruxEcho ลง \"Never sleeping apps\" และปิด \"Put unused apps to sleep\"</string>
+    <string name="battery_request_exemption">ขอยกเว้นการประหยัดพลังงาน</string>
+    <string name="battery_open_app_settings">เปิดหน้าตั้งค่าแอป</string>
+
+    <string name="settings_icon_description">ตั้งค่า / ตรวจสอบไมโครโฟน</string>
+    <string name="sessions_icon_description">รายการบันทึก</string>
+
+    <!-- Sessions list -->
+    <string name="sessions_title">รายการบันทึก</string>
+    <string name="sessions_free_space">พื้นที่ว่างทั้งหมด: %1$s</string>
+    <string name="sessions_empty">ยังไม่มีการบันทึก</string>
+    <string name="sessions_recording_now">กำลังบันทึก</string>
+    <string name="sessions_incomplete">บันทึกไม่สมบูรณ์</string>
+    <string name="sessions_interruptions_count">หยุดชะงัก %1$d ครั้ง</string>
+
+    <!-- Session detail -->
+    <string name="session_detail_title">รายละเอียดการบันทึก</string>
+    <string name="session_detail_unreadable">ไม่สามารถอ่านข้อมูล session.json ได้ — ไฟล์อาจเสียหายหรือถูกลบ</string>
+    <string name="session_detail_device">อุปกรณ์: %1$s (Android %2$s)</string>
+    <string name="session_detail_source">Audio source: %1$s</string>
+    <string name="session_detail_source_fallback">เหตุผลที่ fallback: %1$s</string>
+    <string name="session_detail_sample_rate">Sample rate: ขอ %1$d Hz ได้จริง %2$d Hz</string>
+    <string name="session_detail_format">รูปแบบ: %1$d channel · %2$d-bit</string>
+    <string name="session_detail_effects_disabled">Effects ที่ปิด: %1$s</string>
+    <string name="session_detail_effects_unavailable">Effects ที่ไม่รองรับบนเครื่องนี้: %1$s</string>
+    <string name="session_detail_none">ไม่มี</string>
+    <string name="session_detail_segments_title">Segments (%1$d)</string>
+    <string name="session_detail_interruptions_title">ช่วงที่ขาดหาย (%1$d)</string>
+    <string name="session_detail_no_interruptions">ไม่มีช่วงที่ขาดหายระหว่างบันทึก</string>
+    <string name="session_detail_future_section">บันทึกไม่สมบูรณ์ ไม่มีข้อมูลเพียงพอสำหรับวิเคราะห์ผล</string>
+    <string name="session_detail_delete_button">ลบ session นี้</string>
+    <string name="session_detail_delete_confirm_title">ลบ session นี้?</string>
+    <string name="session_detail_delete_confirm_body">ไฟล์เสียงและ session.json ทั้งหมดของคืนนี้จะถูกลบถาวร กู้คืนไม่ได้</string>
+    <string name="session_detail_delete_confirm_yes">ลบ</string>
+    <string name="session_detail_delete_confirm_cancel">ยกเลิก</string>
+    <string name="interruption_reason_audio_focus_lost">เสียงถูกแย่งใช้งานจากแอปอื่น (เช่น สายเข้า)</string>
+
+    <!-- Recording screen additions (Sprint 4) -->
+    <string name="recording_confirm_stop_title">หยุดบันทึกหรือไม่?</string>
+    <string name="recording_confirm_stop_body">การบันทึกคืนนี้จะสิ้นสุดทันที และจะประมวลผลเท่าที่บันทึกได้</string>
+    <string name="recording_confirm_stop_yes">หยุดบันทึก</string>
+    <string name="recording_confirm_stop_cancel">ยกเลิก</string>
+    <string name="home_storage_forecast">คาดว่าใช้ ~%1$s ต่อคืน · เหลือพอสำหรับ %2$d คืน</string>
+    <string name="home_charging_warning">⚠ ยังไม่ได้เสียบสายชาร์จ — แบตอาจไม่พอสำหรับทั้งคืน</string>
+    <string name="home_battery_not_exempted">ยังไม่ได้ยกเว้นการประหยัดพลังงาน — แอปอาจถูกปิดกลางดึก</string>
+    <string name="home_battery_exempted">✓ ยกเว้นการประหยัดพลังงานแล้ว</string>
+    <string name="home_battery_fix_button">แก้ไข</string>
+    <string name="recording_tap_to_wake">แตะหน้าจอเพื่อดูรายละเอียด</string>
+    <string name="permission_denied_permanently_body">แอปนี้จำเป็นต้องใช้ไมโครโฟนเพื่อบันทึกเสียงตอนนอน — คุณปฏิเสธถาวรไว้ก่อนหน้านี้ กรุณาเปิดหน้าตั้งค่าแอปแล้วอนุญาตไมโครโฟนด้วยตนเอง</string>
+    <string name="permission_denied_open_settings">เปิดการตั้งค่าแอป</string>
+
+    <!-- Results screen (Sprint 4, mock data) -->
+    <string name="results_icon_description">ผลการตรวจจับ</string>
+    <string name="results_title">ผลการตรวจจับ</string>
+    <string name="results_loading">กำลังประมวลผล…</string>
+    <string name="results_never_recorded_title">ยังไม่มีข้อมูลการนอน</string>
+    <string name="results_never_recorded_body">เริ่มบันทึกคืนแรกที่หน้าหลัก แล้วผลจะมาแสดงตรงนี้</string>
+    <string name="results_incomplete_title">บันทึกไม่สมบูรณ์</string>
+    <string name="results_incomplete_body">อาจเกิดจากแอปถูกระบบปิดกลางคัน แบตหมด หรือพื้นที่เก็บข้อมูลเต็มระหว่างบันทึก — ดูรายละเอียดเพิ่มเติมได้ที่รายการบันทึก</string>
+    <string name="results_no_events_title">ไม่พบเสียงกัดฟันในคืนนี้</string>
+    <string name="results_no_events_body">การกัดฟันแต่ละคืนไม่เท่ากันเป็นเรื่องปกติ ไม่ได้แปลว่าระบบทำงานผิดพลาด</string>
+    <string name="results_event_count_label">จำนวนครั้งที่ตรวจพบ</string>
+    <string name="results_events_per_hour_label">ครั้ง/ชั่วโมง</string>
+    <string name="results_comparison_up">เพิ่มขึ้น %1$.0f%% จากค่าเฉลี่ย 7 วัน</string>
+    <string name="results_comparison_down">ลดลง %1$.0f%% จากค่าเฉลี่ย 7 วัน</string>
+    <string name="results_comparison_same">ใกล้เคียงค่าเฉลี่ย 7 วัน</string>
+    <string name="results_timeline_title">ไทม์ไลน์ทั้งคืน</string>
+    <string name="results_clips_title">รายการคลิป (%1$d)</string>
+    <string name="results_clip_no_audio">ไม่มีคลิปเสียง</string>
+    <string name="results_supplementary_title">ข้อมูลประกอบ</string>
+    <string name="results_snore_ratio">สัดส่วนที่มีเสียงกรนร่วมด้วย: %1$.0f%%</string>
+    <string name="results_snore_warning">⚠ สัดส่วนเสียงกรนค่อนข้างสูง อาจเกี่ยวข้องกับการหายใจขณะหลับ</string>
+    <string name="results_medical_disclaimer">ผลลัพธ์นี้มาจากการวิเคราะห์เสียงเบื้องต้น ไม่ใช่การวินิจฉัยทางการแพทย์ หากกังวลควรปรึกษาทันตแพทย์หรือแพทย์ผู้เชี่ยวชาญ</string>
+    <string name="results_demo_banner">โหมดสาธิต — ข้อมูลตัวอย่าง ไม่ใช่ข้อมูลจริง</string>
+    <string name="results_open_trends">ดูแนวโน้ม</string>
+    <string name="confidence_high">มั่นใจสูง</string>
+    <string name="confidence_medium">มั่นใจปานกลาง</string>
+    <string name="confidence_low">มั่นใจต่ำ</string>
+    <string name="session_detail_view_results">ดูผลการตรวจจับ</string>
+
+    <!-- Trends screen (Sprint 4, mock data) -->
+    <string name="trends_title">แนวโน้ม</string>
+    <string name="trends_range_14">14 คืน</string>
+    <string name="trends_range_30">30 คืน</string>
+    <string name="trends_average">เฉลี่ย/คืน</string>
+    <string name="trends_max_night">คืนที่มากสุด</string>
+    <string name="trends_min_night">คืนที่น้อยสุด</string>
+    <string name="trends_empty">ยังไม่มีข้อมูลพอสำหรับแสดงแนวโน้ม</string>
+    <string name="trends_events_unit">ครั้ง</string>
+
+    <!-- Settings / demo mode -->
+    <string name="settings_demo_mode_title">โหมดสาธิต</string>
+    <string name="settings_demo_mode_body">ใช้ข้อมูลตัวอย่างแทนข้อมูลจริง พร้อมคลิปเสียงตัวอย่างที่กดฟังได้ — เหมาะสำหรับนำเสนอ โดยไม่ต้องพึ่งว่าคืนก่อนหน้าบันทึกสำเร็จหรือไม่</string>
+</resources>
