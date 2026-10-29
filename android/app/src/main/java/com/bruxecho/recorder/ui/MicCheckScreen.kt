@@ -21,14 +21,20 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,12 +51,20 @@ import com.bruxecho.recorder.R
 import com.bruxecho.recorder.audio.MicCheckPhase
 import com.bruxecho.recorder.audio.MicCheckRecorder
 import com.bruxecho.recorder.audio.MicCheckResult
+import com.bruxecho.recorder.data.SensitivityConfig
+import com.bruxecho.recorder.data.SensitivityLevel
+import com.bruxecho.recorder.data.SensitivitySettings
 import com.bruxecho.recorder.domain.DemoModeState
 import com.bruxecho.recorder.ui.theme.Accent
+import com.bruxecho.recorder.ui.theme.AccentDim
 import com.bruxecho.recorder.ui.theme.ErrorRed
 import com.bruxecho.recorder.ui.theme.OnAccent
 import com.bruxecho.recorder.ui.theme.TextSecondary
 import com.bruxecho.recorder.ui.theme.Warn
+import com.bruxecho.recorder.util.LOW_SPACE_WARNING_BYTES
+import com.bruxecho.recorder.util.StorageInfo
+import com.bruxecho.recorder.util.formatBytes
+import com.bruxecho.recorder.ui.theme.tabularNumberStyle
 import kotlinx.coroutines.launch
 
 private sealed class MicCheckUiState {
@@ -60,8 +74,15 @@ private sealed class MicCheckUiState {
     data object Failed : MicCheckUiState()
 }
 
+// A full 44.1kHz/16-bit/mono night's worth of WAV, used only to forecast
+// storage — the actual session may run shorter or longer, and the real sample
+// rate is only known once recording begins. Lived in HomeScreen until the
+// storage readout moved here.
+private const val ESTIMATED_NIGHT_HOURS = 8.0
+private const val ESTIMATED_BYTES_PER_NIGHT = (44_100L * 2L * ESTIMATED_NIGHT_HOURS * 3600.0).toLong()
+
 @Composable
-fun MicCheckScreen(onBack: () -> Unit) {
+fun MicCheckScreen(onBack: (() -> Unit)? = null, onOpenReferenceClips: (() -> Unit)? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var uiState by remember { mutableStateOf<MicCheckUiState>(MicCheckUiState.Idle) }
@@ -73,8 +94,10 @@ fun MicCheckScreen(onBack: () -> Unit) {
             .padding(20.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) {
-                Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.miccheck_back))
+            if (onBack != null) {
+                IconButton(onClick = onBack) {
+                    Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.miccheck_back))
+                }
             }
             Text(
                 text = stringResource(R.string.miccheck_title),
@@ -158,7 +181,172 @@ fun MicCheckScreen(onBack: () -> Unit) {
         })
 
         Spacer(modifier = Modifier.height(36.dp))
+        StorageSection()
+        Spacer(modifier = Modifier.height(24.dp))
+
+        if (onOpenReferenceClips != null) {
+            ReferenceClipsSection(onOpen = onOpenReferenceClips)
+            Spacer(modifier = Modifier.height(24.dp))
+        }
+
         DemoModeSection()
+
+        Spacer(modifier = Modifier.height(36.dp))
+        SensitivitySection()
+    }
+}
+
+@Composable
+private fun SensitivitySection() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var config by remember { mutableStateOf(SensitivityConfig(SensitivityLevel.MEDIUM, SensitivityLevel.MEDIUM.k, SensitivityLevel.MEDIUM.bandRatio)) }
+
+    LaunchedEffect(Unit) {
+        SensitivitySettings.observe(context).collect { config = it }
+    }
+
+    Column {
+        Text(
+            text = stringResource(R.string.sensitivity_title),
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = stringResource(R.string.sensitivity_body),
+            color = TextSecondary,
+            fontSize = 12.sp,
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SensitivityChip(stringResource(R.string.sensitivity_low), config.level == SensitivityLevel.LOW) {
+                scope.launch { SensitivitySettings.setLevel(context, SensitivityLevel.LOW) }
+            }
+            SensitivityChip(stringResource(R.string.sensitivity_medium), config.level == SensitivityLevel.MEDIUM) {
+                scope.launch { SensitivitySettings.setLevel(context, SensitivityLevel.MEDIUM) }
+            }
+            SensitivityChip(stringResource(R.string.sensitivity_high), config.level == SensitivityLevel.HIGH) {
+                scope.launch { SensitivitySettings.setLevel(context, SensitivityLevel.HIGH) }
+            }
+            SensitivityChip(stringResource(R.string.sensitivity_custom), config.level == SensitivityLevel.CUSTOM) {
+                scope.launch { SensitivitySettings.setCustom(context, config.k, config.bandRatio) }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+            text = stringResource(R.string.sensitivity_actual_values, config.k, config.bandRatio),
+            style = tabularNumberStyle(fontSize = 13.sp),
+            color = TextSecondary,
+        )
+
+        if (config.level == SensitivityLevel.CUSTOM) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(text = stringResource(R.string.sensitivity_k_label, config.k), color = MaterialTheme.colorScheme.onBackground, fontSize = 13.sp)
+            Slider(
+                value = config.k,
+                onValueChange = { config = config.copy(k = it) },
+                onValueChangeFinished = { scope.launch { SensitivitySettings.setCustom(context, config.k, config.bandRatio) } },
+                valueRange = 2.0f..10.0f,
+                colors = SliderDefaults.colors(thumbColor = Accent, activeTrackColor = Accent),
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(text = stringResource(R.string.sensitivity_band_ratio_label, config.bandRatio), color = MaterialTheme.colorScheme.onBackground, fontSize = 13.sp)
+            Slider(
+                value = config.bandRatio,
+                onValueChange = { config = config.copy(bandRatio = it) },
+                onValueChangeFinished = { scope.launch { SensitivitySettings.setCustom(context, config.k, config.bandRatio) } },
+                valueRange = 0.0f..1.0f,
+                colors = SliderDefaults.colors(thumbColor = Accent, activeTrackColor = Accent),
+            )
+        }
+    }
+}
+
+@Composable
+private fun SensitivityChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(text = label, fontSize = 12.sp) },
+        colors = FilterChipDefaults.filterChipColors(
+            selectedContainerColor = Accent,
+            selectedLabelColor = OnAccent,
+            containerColor = AccentDim,
+            labelColor = TextSecondary,
+        ),
+    )
+}
+
+@Composable
+private fun StorageSection() {
+    val context = LocalContext.current
+    val nightsCount = remember { StorageInfo.completedNightsCount(context) }
+    val freeBytes = remember { StorageInfo.freeBytes(context) }
+    val estimatedRemainingNights = (freeBytes / ESTIMATED_BYTES_PER_NIGHT).toInt()
+
+    Column {
+        Text(
+            text = stringResource(R.string.settings_storage_title),
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = stringResource(R.string.home_nights_recorded, nightsCount),
+            color = TextSecondary,
+            fontSize = 13.sp,
+        )
+        Text(
+            text = stringResource(R.string.home_free_space, formatBytes(freeBytes)),
+            color = TextSecondary,
+            fontSize = 13.sp,
+        )
+        Text(
+            text = stringResource(
+                R.string.home_storage_forecast,
+                formatBytes(ESTIMATED_BYTES_PER_NIGHT),
+                estimatedRemainingNights,
+            ),
+            color = TextSecondary,
+            fontSize = 13.sp,
+        )
+        if (freeBytes < LOW_SPACE_WARNING_BYTES) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(text = stringResource(R.string.home_low_space_warning), color = Warn, fontSize = 13.sp)
+        }
+        // No battery-exemption prompt here: this screen already carries one
+        // further up, with its own buttons. Moving Home's copy down here
+        // verbatim put the same warning on the page twice.
+    }
+}
+
+@Composable
+private fun ReferenceClipsSection(onOpen: () -> Unit) {
+    Column {
+        Text(
+            text = stringResource(R.string.settings_reference_clips),
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = stringResource(R.string.settings_reference_clips_body),
+                color = TextSecondary,
+                fontSize = 13.sp,
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            OutlinedButton(onClick = onOpen) {
+                Text(text = stringResource(R.string.reference_clips_title), fontSize = 13.sp)
+            }
+        }
     }
 }
 

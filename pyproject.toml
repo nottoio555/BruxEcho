@@ -12,6 +12,12 @@ dependencies = [
     "matplotlib>=3.8",
     "pandas>=2.1",
     "streamlit>=1.38",
+    # Sprint 5 (src/embed, tools/detect_similar.py). Large (~500 MB installed):
+    # YAMNet embeddings are what let ~6 confirmed clips act as a prototype
+    # without training anything. TensorFlow is CPU-only here — nothing in this
+    # project needs a GPU.
+    "tensorflow>=2.16",
+    "tensorflow-hub>=0.16",
 ]
 
 [dependency-groups]

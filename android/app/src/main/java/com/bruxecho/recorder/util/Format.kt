@@ -2,6 +2,7 @@ package com.bruxecho.recorder.util
 
 import java.time.Instant
 import java.time.OffsetDateTime
+import java.time.YearMonth
 import java.time.ZoneId
 import java.time.chrono.ThaiBuddhistChronology
 import java.time.format.DateTimeFormatter
@@ -12,6 +13,12 @@ private val THAI_LOCALE = Locale.Builder().setLanguage("th").setRegion("TH").bui
 
 private val THAI_DATE_FORMATTER: DateTimeFormatter =
     DateTimeFormatter.ofPattern("d MMMM yyyy", THAI_LOCALE).withChronology(ThaiBuddhistChronology.INSTANCE)
+
+private val THAI_MONTH_YEAR_FORMATTER: DateTimeFormatter =
+    DateTimeFormatter.ofPattern("MMMM yyyy", THAI_LOCALE).withChronology(ThaiBuddhistChronology.INSTANCE)
+
+/** e.g. "สิงหาคม 2569" (Buddhist Era) — calendar screen's month header. */
+fun formatThaiMonthYear(yearMonth: YearMonth): String = yearMonth.atDay(1).format(THAI_MONTH_YEAR_FORMATTER)
 
 private val TIME_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm", THAI_LOCALE)
 private val TIME_SECONDS_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss", THAI_LOCALE)

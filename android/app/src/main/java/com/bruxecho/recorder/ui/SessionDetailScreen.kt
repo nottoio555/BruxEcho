@@ -26,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,6 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bruxecho.recorder.R
+import com.bruxecho.recorder.data.SessionSync
 import com.bruxecho.recorder.session.InterruptionMeta
 import com.bruxecho.recorder.session.ParsedSession
 import com.bruxecho.recorder.session.SegmentMeta
@@ -48,10 +50,12 @@ import com.bruxecho.recorder.util.formatDurationThai
 import com.bruxecho.recorder.util.formatThaiDate
 import com.bruxecho.recorder.util.formatTimeOnly
 import java.io.File
+import kotlinx.coroutines.launch
 
 @Composable
 fun SessionDetailScreen(sessionId: String, onBack: () -> Unit, onDeleted: () -> Unit, onOpenResults: (String) -> Unit) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val dir = remember(sessionId) { File(StorageInfo.sessionsRootDir(context), sessionId) }
     val parsed = remember(sessionId) { SessionReader.readOne(dir) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -121,9 +125,15 @@ fun SessionDetailScreen(sessionId: String, onBack: () -> Unit, onDeleted: () -> 
             confirmButton = {
                 Button(
                     onClick = {
-                        SessionReader.deleteSession(dir)
                         showDeleteConfirm = false
-                        onDeleted()
+                        scope.launch {
+                            SessionReader.deleteSession(dir)
+                            // Room mirrors session.json (see SessionSync) — must be purged
+                            // too, or the calendar/stats screens keep showing a session
+                            // whose files no longer exist.
+                            SessionSync.deleteSession(context, sessionId)
+                            onDeleted()
+                        }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = ErrorRed, contentColor = Color.White),
                 ) {

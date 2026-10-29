@@ -53,7 +53,7 @@ import com.bruxecho.recorder.R
 import com.bruxecho.recorder.domain.Confidence
 import com.bruxecho.recorder.domain.DemoModeState
 import com.bruxecho.recorder.domain.GrindEvent
-import com.bruxecho.recorder.domain.MockDetectionRepository
+import com.bruxecho.recorder.domain.DetectionRepositoryProvider
 import com.bruxecho.recorder.domain.NightResult
 import com.bruxecho.recorder.playback.rememberClipPlayer
 import com.bruxecho.recorder.ui.theme.Accent
@@ -69,6 +69,9 @@ import com.bruxecho.recorder.util.formatThaiDate
 import com.bruxecho.recorder.util.formatTimeOnly
 import com.bruxecho.recorder.util.formatTimeWithSeconds
 import java.time.Duration
+import java.time.ZoneId
+import java.time.temporal.ChronoUnit
+import kotlin.math.ceil
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
@@ -85,7 +88,7 @@ private const val CLIP_LIST_ITEM_OFFSET = 5
 @Composable
 fun NightResultScreen(sessionId: String?, onBack: () -> Unit, onOpenTrends: () -> Unit) {
     val context = LocalContext.current
-    val repository = remember { MockDetectionRepository(context) }
+    val repository = remember { DetectionRepositoryProvider.get(context) }
     var uiState by remember { mutableStateOf<ResultUiState>(ResultUiState.Loading) }
 
     LaunchedEffect(sessionId, DemoModeState.isEnabled) {
@@ -292,53 +295,158 @@ private fun NoEventsBlock() {
     }
 }
 
-private val TimelineDotSize = 14.dp
-private val TimelineDotTouchTarget = 32.dp // dot itself is small; the tap target around it still meets the 48dp-ish guidance closely enough for a dense timeline
+private val TimelineTrackHeight = 56.dp
+private val TimelineMarkWidth = 5.dp
+// The mark drawn is thin, but the tap target around it stays finger-sized.
+private val TimelineTouchWidth = 28.dp
+private const val TIMELINE_MAX_LABELS = 6
 
+/**
+ * Where the grinding fell across the night, with the clock underneath it.
+ *
+ * Was a row of 14dp circles on a bare strip. At a realistic event count they
+ * overlap into one blob, and with no axis a dot's position answered "roughly
+ * how far into the night" rather than "when" — so a user could see a cluster
+ * but not say whether it was midnight or 4am. Now: hour gridlines, a time
+ * label under each, and thin vertical marks that stay distinguishable when
+ * they crowd together.
+ */
 @Composable
 private fun Timeline(result: NightResult, onDotClick: (Int) -> Unit) {
-    Text(text = stringResource(R.string.results_timeline_title), fontWeight = FontWeight.Medium, fontSize = 15.sp, color = MaterialTheme.colorScheme.onBackground)
+    Text(
+        text = stringResource(R.string.results_timeline_title),
+        fontWeight = FontWeight.Medium,
+        fontSize = 15.sp,
+        color = MaterialTheme.colorScheme.onBackground,
+    )
     Spacer(modifier = Modifier.height(Spacing.sm))
-    val totalDurationS = Duration.between(result.startedAt, result.endedAt).seconds.toFloat().coerceAtLeast(1f)
 
-    BoxWithConstraints(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(48.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(Surface2),
-    ) {
+    val zone = remember { ZoneId.systemDefault() }
+    val totalDurationS = Duration.between(result.startedAt, result.endedAt)
+        .seconds.toFloat().coerceAtLeast(1f)
+
+    // Whole hours inside the night, thinned so the labels never collide.
+    val hourMarks = remember(result.startedAt, result.endedAt) {
+        val startZoned = result.startedAt.atZone(zone)
+        var cursor = startZoned.truncatedTo(ChronoUnit.HOURS)
+        if (cursor.toInstant().isBefore(result.startedAt)) cursor = cursor.plusHours(1)
+        val marks = mutableListOf<java.time.Instant>()
+        while (!cursor.toInstant().isAfter(result.endedAt)) {
+            marks += cursor.toInstant()
+            cursor = cursor.plusHours(1)
+        }
+        val step = maxOf(1, ceil(marks.size / TIMELINE_MAX_LABELS.toFloat()).toInt())
+        marks.filterIndexed { index, _ -> index % step == 0 }
+    }
+
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
         val trackWidthDp = maxWidth
-        result.events.forEachIndexed { index, event ->
-            val fraction = (event.offsetS / totalDurationS).coerceIn(0f, 1f)
-            val xOffset = trackWidthDp * fraction - TimelineDotTouchTarget / 2
+
+        Column {
             Box(
                 modifier = Modifier
-                    .offset(x = xOffset)
-                    .align(Alignment.CenterStart)
-                    .size(TimelineDotTouchTarget)
-                    .clip(CircleShape)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = { onDotClick(index) },
-                    ),
-                contentAlignment = Alignment.Center,
+                    .fillMaxWidth()
+                    .height(TimelineTrackHeight)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Surface2),
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(TimelineDotSize)
-                        .clip(CircleShape)
-                        .background(confidenceColor(event.confidence)),
-                )
+                hourMarks.forEach { mark ->
+                    val fraction = (Duration.between(result.startedAt, mark).seconds / totalDurationS)
+                        .coerceIn(0f, 1f)
+                    Box(
+                        modifier = Modifier
+                            .offset(x = trackWidthDp * fraction)
+                            .align(Alignment.CenterStart)
+                            .width(1.dp)
+                            .height(TimelineTrackHeight)
+                            .background(TextSecondary.copy(alpha = 0.25f)),
+                    )
+                }
+
+                result.events.forEachIndexed { index, event ->
+                    val fraction = (event.offsetS / totalDurationS).coerceIn(0f, 1f)
+                    Box(
+                        modifier = Modifier
+                            .offset(x = trackWidthDp * fraction - TimelineTouchWidth / 2)
+                            .align(Alignment.CenterStart)
+                            .width(TimelineTouchWidth)
+                            .height(TimelineTrackHeight)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = { onDotClick(index) },
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(TimelineMarkWidth)
+                                .height(TimelineTrackHeight - 16.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(confidenceColor(event.confidence)),
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(Spacing.xs))
+            Box(modifier = Modifier.fillMaxWidth().height(16.dp)) {
+                hourMarks.forEach { mark ->
+                    val fraction = (Duration.between(result.startedAt, mark).seconds / totalDurationS)
+                        .coerceIn(0f, 1f)
+                    Text(
+                        text = formatTimeOnly(mark),
+                        color = TextSecondary,
+                        fontSize = 10.sp,
+                        style = tabularNumberStyle(10.sp),
+                        modifier = Modifier
+                            .offset(x = trackWidthDp * fraction - 16.dp)
+                            .align(Alignment.CenterStart),
+                    )
+                }
             }
         }
+    }
+
+    Spacer(modifier = Modifier.height(Spacing.sm))
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        TimelineLegendItem(Positive, stringResource(R.string.confidence_high))
+        TimelineLegendItem(Warn, stringResource(R.string.confidence_medium))
+        TimelineLegendItem(TextSecondary, stringResource(R.string.confidence_low))
     }
 }
 
 @Composable
+private fun TimelineLegendItem(color: Color, label: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .width(TimelineMarkWidth)
+                .height(12.dp)
+                .clip(RoundedCornerShape(3.dp))
+                .background(color),
+        )
+        Spacer(modifier = Modifier.width(Spacing.xs))
+        Text(text = label, color = TextSecondary, fontSize = 11.sp)
+    }
+}
+
+@Composable
+/**
+ * Traffic-light colouring for how sure the model is, shared by the timeline
+ * dots and the clip rows so one event never reads as two different levels.
+ *
+ * HIGH was the accent orange, which is also the colour of every button and
+ * the record control — so "confident" looked like "tap me" and carried no
+ * information. Green/amber/grey is the convention a reader already knows.
+ * All three are design-system colours that meet contrast on the dark ground.
+ */
 private fun confidenceColor(confidence: Confidence) = when (confidence) {
-    Confidence.HIGH -> Accent
+    Confidence.HIGH -> Positive
     Confidence.MEDIUM -> Warn
     Confidence.LOW -> TextSecondary
 }

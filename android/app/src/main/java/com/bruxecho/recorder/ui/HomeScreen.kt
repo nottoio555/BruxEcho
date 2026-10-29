@@ -34,12 +34,14 @@ import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -47,6 +49,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,6 +62,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bruxecho.recorder.R
+import com.bruxecho.recorder.data.db.BruxEchoDatabase
+import com.bruxecho.recorder.data.db.LifestyleTagEntity
 import com.bruxecho.recorder.service.RecordingState
 import com.bruxecho.recorder.ui.theme.Accent
 import com.bruxecho.recorder.ui.theme.ErrorRed
@@ -68,22 +73,18 @@ import com.bruxecho.recorder.ui.theme.Surface2
 import com.bruxecho.recorder.ui.theme.TextSecondary
 import com.bruxecho.recorder.ui.theme.Warn
 import com.bruxecho.recorder.ui.theme.tabularNumberStyle
-import com.bruxecho.recorder.util.LOW_SPACE_WARNING_BYTES
 import com.bruxecho.recorder.util.StorageInfo
 import com.bruxecho.recorder.util.formatBytes
 import com.bruxecho.recorder.util.formatHms
 import com.bruxecho.recorder.util.isIgnoringBatteryOptimizations
+import java.time.LocalDate
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private val RECORD_BUTTON_SIZE = 140.dp
 private const val NIGHT_MODE_IDLE_TIMEOUT_MS = 30_000L
 private const val DEEP_DIM_BRIGHTNESS = 0.01f
 
-// A full 44.1kHz/16-bit/mono night's worth of WAV, used only to forecast
-// storage before recording starts — the actual session may run shorter or
-// longer, and the real sample rate is only known once recording begins.
-private const val ESTIMATED_NIGHT_HOURS = 8.0
-private const val ESTIMATED_BYTES_PER_NIGHT = (44_100L * 2L * ESTIMATED_NIGHT_HOURS * 3600.0).toLong()
 
 @Composable
 fun HomeScreen(
@@ -153,6 +154,7 @@ private fun TopBar(onOpenSettings: () -> Unit, onOpenSessions: () -> Unit, onOpe
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun IdleBody(
     onStartRecording: () -> Unit,
@@ -161,11 +163,7 @@ private fun IdleBody(
     onOpenAppSettings: () -> Unit,
 ) {
     val context = LocalContext.current
-    val nightsCount = remember { StorageInfo.completedNightsCount(context) }
-    val freeBytes = remember { StorageInfo.freeBytes(context) }
-    val estimatedRemainingNights = (freeBytes / ESTIMATED_BYTES_PER_NIGHT).toInt()
-    val batteryExempted = remember { isIgnoringBatteryOptimizations(context) }
-
+    val scope = rememberCoroutineScope()
     Column(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -186,23 +184,6 @@ private fun IdleBody(
             fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onBackground,
         )
-        Spacer(modifier = Modifier.height(Spacing.sm))
-        Text(
-            text = stringResource(R.string.home_storage_forecast, formatBytes(ESTIMATED_BYTES_PER_NIGHT), estimatedRemainingNights),
-            color = TextSecondary,
-            fontSize = 12.sp,
-        )
-
-        if (freeBytes < LOW_SPACE_WARNING_BYTES) {
-            Spacer(modifier = Modifier.height(Spacing.md))
-            Text(text = stringResource(R.string.home_low_space_warning), color = Warn, fontSize = 13.sp)
-        }
-
-        if (!batteryExempted) {
-            Spacer(modifier = Modifier.height(Spacing.md))
-            BatteryExemptionRow()
-        }
-
         if (errorMessage != null) {
             Spacer(modifier = Modifier.height(Spacing.md))
             if (micPermissionPermanentlyDenied) {
@@ -222,35 +203,6 @@ private fun IdleBody(
         }
     }
 
-    Column(
-        modifier = Modifier.fillMaxSize().padding(bottom = Spacing.xl),
-        verticalArrangement = Arrangement.Bottom,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(text = stringResource(R.string.home_nights_recorded, nightsCount), color = TextSecondary, fontSize = 14.sp)
-        Spacer(modifier = Modifier.height(Spacing.xs))
-        Text(text = stringResource(R.string.home_free_space, formatBytes(freeBytes)), color = TextSecondary, fontSize = 14.sp)
-    }
-}
-
-@Composable
-private fun BatteryExemptionRow() {
-    val context = LocalContext.current
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            text = stringResource(R.string.home_battery_not_exempted),
-            color = Warn,
-            fontSize = 12.sp,
-            modifier = Modifier.width(220.dp),
-        )
-        Spacer(modifier = Modifier.width(Spacing.sm))
-        TextButton(onClick = {
-            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${context.packageName}"))
-            context.startActivity(intent)
-        }) {
-            Text(text = stringResource(R.string.home_battery_fix_button), color = Accent, fontSize = 12.sp)
-        }
-    }
 }
 
 @Composable

@@ -126,3 +126,65 @@ def test_resolve_band_scales_with_sample_rate():
 def test_resolve_band_rejects_too_low_sample_rate():
     with pytest.raises(ValueError):
         resolve_band(4000)  # Nyquist*0.95 (1900 Hz) doesn't clear the 2000 Hz low edge
+
+
+def test_resolve_band_accepts_custom_high_edge():
+    band = resolve_band(44100, low_hz=1000.0, high_hz=6000.0)
+    assert (band.low_hz, band.high_hz) == (1000.0, 6000.0)
+    assert band.mid_hz == 3500.0  # split point follows the band, not a fixed 8-9 kHz
+    assert not band.high_hz_was_capped
+
+
+def test_resolve_band_rejects_inverted_band():
+    with pytest.raises(ValueError):
+        resolve_band(44100, low_hz=6000.0, high_hz=1000.0)
+
+
+def test_resolve_band_flags_high_edge_capped_by_nyquist():
+    band = resolve_band(11025, low_hz=1000.0, high_hz=16000.0)
+    assert band.high_hz == pytest.approx(11025 / 2 * 0.95)
+    assert band.requested_high_hz == 16000.0
+    assert band.high_hz_was_capped
+
+
+def test_event_records_the_settings_it_was_detected_with():
+    """Every candidate carries its own band/k so two runs stay comparable."""
+    rng = np.random.default_rng(11)
+    signal = _make_signal(30.0, [(10.0, 0.8)], rng)
+
+    events = _run_gate(signal, k=7.0, band_low_hz=1500.0, band_high_hz=8000.0)
+
+    assert len(events) == 1
+    event = events[0]
+    assert (event.band_low_hz, event.band_high_hz) == (1500.0, 8000.0)
+    assert event.band_mid_hz == 4750.0
+    assert event.gate_k == 7.0
+
+
+def _make_tone_signal(duration_s: float, tone_hz: float, rng: np.random.Generator) -> np.ndarray:
+    """Quiet broadband background with one narrowband tone burst at 10-11s."""
+    n = int(duration_s * SAMPLE_RATE)
+    signal = rng.normal(0.0, 0.001, n).astype(np.float32)
+    start, end = int(10.0 * SAMPLE_RATE), int(11.0 * SAMPLE_RATE)
+    t = np.arange(end - start) / SAMPLE_RATE
+    signal[start:end] += (0.05 * np.sin(2 * np.pi * tone_hz * t)).astype(np.float32)
+    return signal
+
+
+def test_band_ratio_high_split_follows_the_configured_band():
+    """A 2.5 kHz burst is 'lower half' or 'upper half' depending on the band.
+
+    This is the whole point of making the band configurable: band_ratio_high
+    is only interpretable relative to the band it was measured in.
+    """
+    rng = np.random.default_rng(12)
+    signal = _make_tone_signal(30.0, tone_hz=2500.0, rng=rng)
+
+    # 2000-8000 Hz -> split at 5000 Hz, so 2.5 kHz sits in the lower half.
+    lower_half = _run_gate(signal, band_low_hz=2000.0, band_high_hz=8000.0)
+    # 1000-3000 Hz -> split at 2000 Hz, so the same burst is now upper half.
+    upper_half = _run_gate(signal, band_low_hz=1000.0, band_high_hz=3000.0)
+
+    assert len(lower_half) == 1 and len(upper_half) == 1
+    assert lower_half[0].band_ratio_high < 0.5
+    assert upper_half[0].band_ratio_high > 0.5

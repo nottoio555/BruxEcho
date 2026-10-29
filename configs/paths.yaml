@@ -1,0 +1,19 @@
+# External data locations.
+#
+# The DreamCatcher dataset lives OUTSIDE this repository on purpose: the
+# project sits in a OneDrive folder, and 17,774 wav files would be
+# continuously re-synced. Nothing in this repo ever copies or moves those
+# files — tools read them in place from the paths below.
+#
+# Generated artifacts (embedding caches, trained models) DO live in the
+# repo, under results/ and models/.
+
+dreamcatcher:
+  root: "C:/datasets/dreamcatcher"
+  audio_dir: "C:/datasets/dreamcatcher/data/validation"
+  segmentation_tsv: "C:/datasets/dreamcatcher/segmentation/validation.tsv"
+
+# Where derived artifacts go (relative to the repo root).
+artifacts:
+  embedding_cache: "results/train_cache"
+  model_dir: "models/bruxism_classifier"

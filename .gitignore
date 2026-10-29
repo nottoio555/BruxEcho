@@ -37,3 +37,11 @@ shots/
 
 # Claude Code session-local state — not project content.
 .claude/
+
+# Trained model: the head + its normalization stats are the deliverable and
+# ship with the repo. val_split.npz is 153 MB of cached val embeddings that
+# `tools/train_model.py` regenerates, so it stays out.
+models/**/val_split.npz
+
+# Scratch output from manual checks — regenerated locally.
+check/

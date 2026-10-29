@@ -1,13 +1,13 @@
 package com.bruxecho.recorder.domain
 
 import android.content.Context
-import com.bruxecho.recorder.session.SessionReader
-import com.bruxecho.recorder.util.StorageInfo
-import java.io.File
+import com.bruxecho.recorder.data.SessionSync
+import com.bruxecho.recorder.data.db.BruxEchoDatabase
+import com.bruxecho.recorder.data.db.EventConfidence
+import com.bruxecho.recorder.data.db.EventType
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
-import java.time.OffsetDateTime
 import java.time.ZoneId
 import kotlin.random.Random
 import kotlinx.coroutines.Dispatchers
@@ -16,6 +16,7 @@ import kotlinx.coroutines.withContext
 
 private const val SIMULATED_PROCESSING_DELAY_MS = 1200L
 private const val DEMO_CLIP_COUNT = 4
+private const val MIN_PRIOR_NIGHTS_FOR_COMPARISON = 3
 
 // oldest -> newest, 30 nights: a noisier "before" baseline for the first 16,
 // then the same 14-night improving tail — so toggling the trends screen's
@@ -28,19 +29,22 @@ private val DEMO_PATTERN = listOf(
 /**
  * The only [DetectionRepository] implementation this sprint — no detection
  * model exists yet (that's Sprint 6's `RealDetectionRepository`, behind
- * this same interface). Two modes, both deterministic rather than
- * random-per-call:
+ * this same interface). Two modes:
  *
- * - Demo mode off: numbers are seeded from the real session id, so the
- *   same session shows the same result across app runs, and "no result"
- *   is a real signal (session missing or never finished), not noise.
+ * - Demo mode off: reads from Room ([SessionSync] keeps it mirrored from
+ *   session.json). Event numbers are still deterministic, seeded from the
+ *   session id by [SessionSync] at import time, so a session's numbers
+ *   don't change across app runs — same guarantee as before Room existed,
+ *   just persisted instead of recomputed on every read.
  * - Demo mode on ([DemoModeState]): returns a curated, presentation-ready
- *   14-night dataset with bundled playable sample clips, independent of
- *   whatever is actually on disk — that's the entire point of demo mode.
+ *   dataset with bundled playable sample clips, entirely in-memory —
+ *   deliberately never touches Room, so a demo never depends on (or
+ *   pollutes) whatever is actually on disk.
  */
-class MockDetectionRepository(context: Context) : DetectionRepository {
+class MockDetectionRepository(context: Context) : SessionAwareDetectionRepository {
 
     private val appContext = context.applicationContext
+    private val db by lazy { BruxEchoDatabase.getInstance(appContext) }
 
     override suspend fun getNightResult(sessionId: String): NightResult? = withContext(Dispatchers.Default) {
         // Stands in for real analysis time, so the UI's "processing" state
@@ -51,15 +55,8 @@ class MockDetectionRepository(context: Context) : DetectionRepository {
             return@withContext demoResultFor(sessionId)
         }
 
-        val dir = File(StorageInfo.sessionsRootDir(appContext), sessionId)
-        val parsed = SessionReader.readOne(dir) ?: return@withContext null
-        val startedAtIso = parsed.startedAt ?: return@withContext null
-        val endedAtIso = parsed.endedAt ?: return@withContext null // crashed/never finished — no result
-
-        val startedAt = runCatching { OffsetDateTime.parse(startedAtIso).toInstant() }.getOrNull() ?: return@withContext null
-        val endedAt = runCatching { OffsetDateTime.parse(endedAtIso).toInstant() }.getOrNull() ?: return@withContext null
-
-        buildMockResult(sessionId, startedAt, endedAt, Random(sessionId.hashCode().toLong()))
+        SessionSync.sync(appContext)
+        buildRoomResult(sessionId)
     }
 
     override suspend fun getRecentNights(limit: Int): List<NightSummary> = withContext(Dispatchers.Default) {
@@ -67,63 +64,80 @@ class MockDetectionRepository(context: Context) : DetectionRepository {
             return@withContext demoSummaries().take(limit)
         }
 
-        SessionReader.listSessions(StorageInfo.sessionsRootDir(appContext))
-            .mapNotNull { entry ->
-                val parsed = entry.parsed ?: return@mapNotNull null
-                val startedAtIso = parsed.startedAt ?: return@mapNotNull null
-                if (parsed.endedAt == null) return@mapNotNull null
-                val startedAt = runCatching { OffsetDateTime.parse(startedAtIso).toInstant() }.getOrNull()
-                    ?: return@mapNotNull null
-                val date = startedAt.atZone(ZoneId.systemDefault()).toLocalDate()
-                NightSummary(entry.sessionId, date, mockEventCount(Random(entry.sessionId.hashCode().toLong())))
-            }
-            .sortedByDescending { it.date }
-            .take(limit)
+        SessionSync.sync(appContext)
+        db.sessionDao().getRecent(limit).filter { it.isComplete }.map { session ->
+            val grindCount = db.eventDao().getForSession(session.sessionId).count { it.type == EventType.GRIND }
+            NightSummary(session.sessionId, session.startedAt.atZone(ZoneId.systemDefault()).toLocalDate(), grindCount)
+        }
     }
 
     /** Whether a specific real session exists but can't produce a result (crashed / never finished). */
-    suspend fun isSessionIncomplete(sessionId: String): Boolean = withContext(Dispatchers.Default) {
+    override suspend fun isSessionIncomplete(sessionId: String): Boolean = withContext(Dispatchers.Default) {
         if (DemoModeState.isEnabled) return@withContext false
-        val dir = File(StorageInfo.sessionsRootDir(appContext), sessionId)
-        val parsed = SessionReader.readOne(dir)
-        parsed == null || parsed.endedAt == null
+        SessionSync.sync(appContext)
+        val session = db.sessionDao().getBySessionId(sessionId)
+        session == null || !session.isComplete
     }
 
-    /** The most recent usable session id, or null if there's nothing to show yet. */
     /**
      * The most recent session, complete or not. Deliberately does **not**
      * skip past an incomplete one to find an older working result — if last
      * night's recording crashed, that's exactly what the user opening
      * "results" wants to be told, not silently hidden behind an older night.
      */
-    suspend fun latestSessionId(): String? = withContext(Dispatchers.Default) {
+    override suspend fun latestSessionId(): String? = withContext(Dispatchers.Default) {
         if (DemoModeState.isEnabled) return@withContext demoSummaries().firstOrNull()?.sessionId
-        SessionReader.listSessions(StorageInfo.sessionsRootDir(appContext)).firstOrNull()?.sessionId
+        SessionSync.sync(appContext)
+        db.sessionDao().getLatest()?.sessionId
     }
 
-    private fun buildMockResult(sessionId: String, startedAt: Instant, endedAt: Instant, rng: Random): NightResult {
-        val durationS = Duration.between(startedAt, endedAt).seconds.coerceAtLeast(1L).toFloat()
-        val eventCount = mockEventCount(rng)
-        val events = buildEvents(eventCount, startedAt, durationS, rng, clipPathFor = { null })
+    private suspend fun buildRoomResult(sessionId: String): NightResult? {
+        val session = db.sessionDao().getBySessionId(sessionId) ?: return null
+        val endedAt = session.endedAt
+        if (!session.isComplete || endedAt == null) return null
+
+        val events = db.eventDao().getForSession(sessionId)
+        val durationS = Duration.between(session.startedAt, endedAt).seconds.coerceAtLeast(1L).toFloat()
+
+        val grindEvents = events.filter { it.type == EventType.GRIND }.map { e ->
+            GrindEvent(
+                id = "evt_${e.id}",
+                offsetS = e.startS,
+                timestamp = session.startedAt.plusSeconds(e.startS.toLong()),
+                durationS = e.durationS,
+                confidence = e.confidence.toDomain(),
+                clipPath = e.clipPath,
+            )
+        }
+        val snoreEvents = events.filter { it.type == EventType.SNORE }
+        val snoreRatio = (snoreEvents.sumOf { it.durationS.toDouble() } / durationS).toFloat().coerceIn(0f, 1f)
+
+        val date = session.startedAt.atZone(ZoneId.systemDefault()).toLocalDate()
+        val priorNights = db.dailySummaryDao().getRange(date.minusDays(7), date.minusDays(1)).filter { it.isComplete }
+        val comparison = if (priorNights.size < MIN_PRIOR_NIGHTS_FOR_COMPARISON) {
+            null
+        } else {
+            val avg = priorNights.map { it.mildCount + it.severeCount }.average()
+            if (avg <= 0.0) null else ((grindEvents.size - avg) / avg).toFloat()
+        }
+
         return NightResult(
             sessionId = sessionId,
-            startedAt = startedAt,
+            startedAt = session.startedAt,
             endedAt = endedAt,
-            grindEventCount = eventCount,
-            eventsPerHour = eventCount / (durationS / 3600f),
-            totalGrindDurationS = events.sumOf { it.durationS.toDouble() }.toFloat(),
-            events = events,
-            snoreRatio = if (rng.nextInt(100) < 20) null else rng.nextDouble(0.0, 0.6).toFloat(),
-            // Derived from a synthetic 7-day average rather than independent
-            // noise — otherwise a 0-event night could nonsensically show as
-            // "up 4% from last week".
-            comparisonPrevious7d = if (rng.nextInt(100) < 10) {
-                null
-            } else {
-                val previous7dAvg = rng.nextDouble(2.0, 12.0)
-                ((eventCount - previous7dAvg) / previous7dAvg).toFloat()
-            },
+            grindEventCount = grindEvents.size,
+            eventsPerHour = grindEvents.size / (durationS / 3600f),
+            totalGrindDurationS = grindEvents.sumOf { it.durationS.toDouble() }.toFloat(),
+            events = grindEvents,
+            snoreRatio = snoreRatio,
+            comparisonPrevious7d = comparison,
         )
+    }
+
+    private fun EventConfidence.toDomain(): Confidence = when (this) {
+        EventConfidence.HIGH -> Confidence.HIGH
+        EventConfidence.MEDIUM -> Confidence.MEDIUM
+        EventConfidence.LOW -> Confidence.LOW
     }
 
     private fun buildEvents(
@@ -149,11 +163,6 @@ class MockDetectionRepository(context: Context) : DetectionRepository {
                 clipPath = clipPathFor(i),
             )
         }
-    }
-
-    private fun mockEventCount(rng: Random): Int {
-        if (rng.nextInt(100) < 15) return 0 // a genuinely quiet night is normal, not an error — see NightResultScreen's "no events" state
-        return rng.nextInt(3, 22)
     }
 
     // --- Demo dataset: fixed, not time-random, so a demo looks the same every time it's opened. ---

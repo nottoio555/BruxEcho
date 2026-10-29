@@ -21,6 +21,7 @@ data class ParsedSession(
     val segments: List<SegmentMeta>,
     val interruptions: List<InterruptionMeta>,
     val totalDurationS: Double,
+    val provenance: String?,
 )
 
 /**
@@ -88,6 +89,7 @@ object SessionReader {
                     }
                 } ?: emptyList(),
                 totalDurationS = json.optDouble("total_duration_s", 0.0),
+                provenance = json.optStringOrNull("provenance"),
             )
         } catch (e: Exception) {
             null

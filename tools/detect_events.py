@@ -13,6 +13,13 @@ memory), then writes:
 Usage:
     python -m tools.detect_events --session data/raw/sleep/ext_20260820
     python -m tools.detect_events --session <path> --k 5 --min-duration 0.3
+    python -m tools.detect_events --session <path> --low-hz 1000 --high-hz 6000 \
+        --output results/events_1k6k
+
+The gate band is a parameter, not a constant — see ``src.detect.energy_gate``
+for why, and ``tools/sweep_band.py`` for comparing several bands over one
+night before committing to one. The band and ``k`` actually used are written
+into every row of candidates.csv so two runs stay comparable afterwards.
 """
 
 from __future__ import annotations
@@ -29,7 +36,14 @@ import numpy as np
 import pandas as pd
 import soundfile as sf
 
-from src.detect.energy_gate import DEFAULT_K, DEFAULT_MIN_EVENT_DURATION_S, EnergyGate, EventCandidate
+from src.detect.energy_gate import (
+    DEFAULT_HIGH_HZ,
+    DEFAULT_K,
+    DEFAULT_LOW_HZ,
+    DEFAULT_MIN_EVENT_DURATION_S,
+    EnergyGate,
+    EventCandidate,
+)
 from src.session.schema import SessionInfo, read_session_json
 from src.session.timeline import audio_offset_to_wallclock
 
@@ -209,9 +223,12 @@ def print_summary(
     print("═" * 45)
     print(f"สรุปผล — {session.session_id}")
     print("═" * 45)
-    print(f"ย่านความถี่ที่ใช้จริง: {gate.band.low_hz:.0f}-{gate.band.high_hz:.0f} Hz")
+    print(f"ย่านความถี่ที่ใช้จริง: {gate.band.low_hz:.0f}-{gate.band.high_hz:.0f} Hz (k={k:g})")
+    print(f"จุดแบ่งครึ่งบนสำหรับ band_ratio_high: {gate.band.mid_hz:.0f} Hz")
+    if gate.band.high_hz_was_capped:
+        print(f"⚠ ขอย่านบนไว้ {gate.band.requested_high_hz:.0f} Hz แต่ sample rate รองรับได้แค่ {gate.band.high_hz:.0f} Hz")
     if gate.band.narrow_band_warning:
-        print("⚠ ย่านความถี่แคบกว่า 6000 Hz — ประสิทธิภาพการกรองจะลดลงมาก")
+        print(f"⚠ ย่านกว้างแค่ {gate.band.high_hz - gate.band.low_hz:.0f} Hz (แคบกว่า 6000 Hz) — ประสิทธิภาพการกรองจะลดลง")
 
     n_events = len(events)
     hours = total_duration_s / 3600.0 if total_duration_s > 0 else 0.0
@@ -244,10 +261,29 @@ def print_summary(
     print("═" * 45)
 
 
-def run(session_dir: Path, output_root: Path, k: float, min_duration_s: float) -> None:
+def run(
+    session_dir: Path,
+    output_root: Path,
+    k: float,
+    min_duration_s: float,
+    low_hz: float,
+    high_hz: float,
+    force: bool,
+) -> None:
     session = read_session_json(session_dir)
     if not session.segments:
         raise SystemExit(f"session.json ที่ {session_dir} ไม่มี segment ให้ประมวลผล")
+
+    session_output_dir = output_root / session.session_id
+    candidates_path = session_output_dir / "candidates.csv"
+    if candidates_path.exists() and not force:
+        # Labels made in tools/review.py live next to candidates.csv and are
+        # keyed by event_id; silently rewriting candidates.csv with different
+        # settings would desync them with no warning. Refuse by default.
+        raise SystemExit(
+            f"มี {candidates_path} อยู่แล้ว — การเขียนทับจะทำให้ labels.csv ที่อ้าง event_id เดิมไม่ตรงกัน\n"
+            f"ใช้ --output <โฟลเดอร์ใหม่> สำหรับการทดลองชุดค่าใหม่ หรือ --force ถ้าตั้งใจเขียนทับจริงๆ"
+        )
 
     sample_rate = resolve_sample_rate(session, session_dir)
     logger.info(
@@ -258,10 +294,27 @@ def run(session_dir: Path, output_root: Path, k: float, min_duration_s: float) -
         len(session.segments),
     )
 
-    gate = EnergyGate(sample_rate=sample_rate, session_id=session.session_id, k=k, min_duration_s=min_duration_s)
+    gate = EnergyGate(
+        sample_rate=sample_rate,
+        session_id=session.session_id,
+        k=k,
+        min_duration_s=min_duration_s,
+        band_low_hz=low_hz,
+        band_high_hz=high_hz,
+    )
+    if gate.band.high_hz_was_capped:
+        logger.warning(
+            "ขอย่านบนไว้ %.0f Hz แต่ sample rate %d Hz รองรับได้แค่ %.0f Hz — ใช้ค่าหลังนี้แทน",
+            gate.band.requested_high_hz,
+            sample_rate,
+            gate.band.high_hz,
+        )
     if gate.band.narrow_band_warning:
         logger.warning(
-            "ย่านความถี่ที่ใช้จริงแคบกว่า 6000 Hz (%.0f-%.0f Hz) — ประสิทธิภาพการกรองจะลดลงมาก", gate.band.low_hz, gate.band.high_hz
+            "ย่านความถี่ที่ใช้จริงกว้างแค่ %.0f Hz (%.0f-%.0f Hz) — แคบกว่า 6000 Hz ประสิทธิภาพการกรองจะลดลง",
+            gate.band.high_hz - gate.band.low_hz,
+            gate.band.low_hz,
+            gate.band.high_hz,
         )
 
     segment_boundaries = stream_session(session, session_dir, gate)
@@ -272,9 +325,8 @@ def run(session_dir: Path, output_root: Path, k: float, min_duration_s: float) -
     events = gate.finalize()
     logger.info("พบ %d event ดิบหลังกรอง merge/min-duration", len(events))
 
-    session_output_dir = output_root / session.session_id
     clip_files = write_clips(events, segment_boundaries, session_dir, session_output_dir / "clips", session)
-    write_candidates_csv(events, clip_files, session, session_output_dir / "candidates.csv")
+    write_candidates_csv(events, clip_files, session, candidates_path)
     plot_overview(gate, events, session, session_output_dir / "overview.png")
 
     logger.info("บันทึก %s", session_output_dir / "candidates.csv")
@@ -294,7 +346,24 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=DEFAULT_MIN_EVENT_DURATION_S,
         help=f"ความยาวขั้นต่ำของ event เป็นวินาที (ค่าเริ่มต้น {DEFAULT_MIN_EVENT_DURATION_S})",
     )
+    parser.add_argument(
+        "--low-hz",
+        type=float,
+        default=DEFAULT_LOW_HZ,
+        help=f"ขอบล่างของย่านความถี่ที่ใช้กรอง (Hz, ค่าเริ่มต้น {DEFAULT_LOW_HZ:.0f})",
+    )
+    parser.add_argument(
+        "--high-hz",
+        type=float,
+        default=DEFAULT_HIGH_HZ,
+        help=f"ขอบบนของย่านความถี่ (Hz, ค่าเริ่มต้น {DEFAULT_HIGH_HZ:.0f}) — จะถูกลดอัตโนมัติถ้าเกิน 95%% ของ Nyquist",
+    )
     parser.add_argument("--output", type=Path, default=Path("results/events"), help="โฟลเดอร์ปลายทางหลัก")
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="ยอมเขียนทับ candidates.csv เดิม (ค่าเริ่มต้นคือปฏิเสธ เพื่อกัน labels.csv ที่อ้าง event_id เดิมหลุดจากกัน)",
+    )
     return parser.parse_args(argv)
 
 
@@ -308,7 +377,15 @@ def main(argv: list[str] | None = None) -> None:
     if not (args.session / "session.json").exists():
         raise SystemExit(f"ไม่พบ session.json ใน {args.session}")
 
-    run(args.session, args.output, args.k, args.min_duration)
+    run(
+        args.session,
+        args.output,
+        args.k,
+        args.min_duration,
+        args.low_hz,
+        args.high_hz,
+        args.force,
+    )
 
 
 if __name__ == "__main__":

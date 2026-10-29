@@ -130,4 +130,69 @@
     <!-- Settings / demo mode -->
     <string name="settings_demo_mode_title">โหมดสาธิต</string>
     <string name="settings_demo_mode_body">ใช้ข้อมูลตัวอย่างแทนข้อมูลจริง พร้อมคลิปเสียงตัวอย่างที่กดฟังได้ — เหมาะสำหรับนำเสนอ โดยไม่ต้องพึ่งว่าคืนก่อนหน้าบันทึกสำเร็จหรือไม่</string>
+
+    <!-- Bottom navigation (Sprint 4.5) -->
+    <string name="bottom_tab_sleep">การนอน</string>
+    <string name="bottom_tab_log">บันทึก</string>
+    <string name="bottom_tab_settings">การตั้งค่า</string>
+
+    <!-- Lifestyle tag bottom sheet -->
+    <string name="lifestyle_sheet_title">วันนี้ทำอะไรบ้าง</string>
+    <string name="lifestyle_sheet_subtitle">ไม่บังคับ — ช่วยให้วิเคราะห์ได้ว่าปัจจัยใดสัมพันธ์กับการกัดฟัน</string>
+    <string name="lifestyle_sheet_memo_hint">บันทึกเพิ่มเติม (ถ้ามี)</string>
+    <string name="lifestyle_sheet_confirm">บันทึกและเริ่มอัดเสียง</string>
+    <string name="lifestyle_sheet_skip">ข้าม</string>
+    <string name="lifestyle_tag_caffeine">คาเฟอีน</string>
+    <string name="lifestyle_tag_alcohol">แอลกอฮอล์</string>
+    <string name="lifestyle_tag_exercise">ออกกำลังกาย</string>
+    <string name="lifestyle_tag_stress">ความเครียด</string>
+    <string name="lifestyle_tag_late_sleep">นอนดึก</string>
+
+    <!-- Calendar (แท็บบันทึก) -->
+    <string name="calendar_no_data">ยังไม่มีข้อมูลวันนี้</string>
+    <string name="calendar_incomplete">การบันทึกคืนนี้ไม่สมบูรณ์</string>
+    <string name="calendar_sleep_duration">ระยะเวลานอน</string>
+    <string name="calendar_mild_count">พบเล็กน้อย</string>
+    <string name="calendar_severe_count">พบมาก</string>
+    <string name="calendar_tags_title">พฤติกรรมวันนี้</string>
+    <string name="calendar_view_results">ดูผลตรวจจับ</string>
+    <string name="calendar_view_session">ประวัติ session</string>
+    <string name="calendar_sessions_title">การบันทึกของวันนี้ (%1$d)</string>
+    <string name="calendar_session_grind_count">กัดฟัน %1$d ครั้ง</string>
+
+    <!-- Stats (แท็บบันทึก) -->
+    <string name="log_tab_calendar">ปฏิทิน</string>
+    <string name="log_tab_stats">สถิติ</string>
+    <string name="stats_range_week">สัปดาห์</string>
+    <string name="stats_range_month">เดือน</string>
+    <string name="stats_range_year">ปี</string>
+    <string name="stats_avg_sleep">เฉลี่ยเวลานอน</string>
+    <string name="stats_total_grind">รวมกัดฟัน (ครั้ง)</string>
+    <string name="stats_total_snore">รวมการกรน (ครั้ง)</string>
+    <string name="stats_empty">ยังไม่มีข้อมูลในช่วงนี้</string>
+    <string name="stats_factor_title">วิเคราะห์ปัจจัย (90 วันล่าสุด)</string>
+    <string name="stats_factor_subtitle">เทียบจำนวนเหตุการณ์เฉลี่ยระหว่างวันที่มีแท็บนั้นกับวันที่ไม่มี</string>
+    <string name="stats_factor_insufficient">ข้อมูลยังไม่พอ (%1$d วัน)</string>
+    <string name="stats_factor_result">%1$s เทียบ %2$s ครั้ง/คืน</string>
+
+    <!-- Settings / sensitivity -->
+    <string name="sensitivity_title">ความไวในการตรวจจับ</string>
+    <string name="sensitivity_body">ค่านี้จะถูกใช้โดยระบบตรวจจับจริงใน Sprint ถัดไป — บันทึกไว้ล่วงหน้าที่นี่</string>
+    <string name="sensitivity_low">ต่ำ</string>
+    <string name="sensitivity_medium">ปานกลาง</string>
+    <string name="sensitivity_high">สูง</string>
+    <string name="sensitivity_custom">กำหนดเอง</string>
+    <string name="sensitivity_actual_values">RMS threshold (k) = %1$.1f · Band ratio = %2$.2f</string>
+    <string name="sensitivity_k_label">RMS threshold (k): %1$.1f</string>
+    <string name="sensitivity_band_ratio_label">Band ratio: %1$.2f</string>
+    <string name="reference_clips_title">ตัวอย่างเสียงอ้างอิง</string>
+    <string name="reference_clips_not_results">ไม่ใช่ผลการตรวจจับ</string>
+    <string name="reference_clips_banner_body">คลิปในหน้านี้เป็นเสียงกัดฟันที่ยืนยันแล้วซึ่งติดมากับแอป ไม่เกี่ยวกับการนอนของคุณ และไม่ถูกนับรวมในผลการตรวจจับหรือสถิติใดๆ</string>
+    <string name="reference_clips_intro">ใช้ฟังเทียบว่าเสียงกัดฟันจริงเป็นอย่างไร จะได้ตัดสินคลิปในผลการตรวจจับได้แม่นขึ้น</string>
+    <string name="reference_clip_label">เสียงอ้างอิง %1$d</string>
+    <string name="reference_clip_source">เสียงกัดฟันตอนนอนที่ยืนยันด้วยการฟัง</string>
+    <string name="settings_reference_clips">ตัวอย่างเสียงอ้างอิง</string>
+    <string name="settings_reference_clips_body">ฟังว่าเสียงกัดฟันจริงเป็นอย่างไร (ไม่ใช่ผลการตรวจจับ)</string>
+    <string name="settings_storage_title">พื้นที่จัดเก็บ</string>
+    <string name="lifestyle_cancel">ปิด</string>
 </resources>

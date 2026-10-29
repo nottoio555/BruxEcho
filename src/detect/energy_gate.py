@@ -13,6 +13,18 @@ while snoring/HVAC/room rumble sit below ~1 kHz and account for >90% of
 total signal energy. Gating on band-limited energy throws out that
 dominant low-frequency noise before any modeling happens.
 
+## Why the band is a parameter, not a constant
+
+Sprint 1's 8-16 kHz figure came from deliberate tooth-*rubbing* recorded
+~30 cm from the mic. Clips of actual sleep bruxism (confirmed by ear) look
+very different: 0.1-2.4% of energy above 8 kHz instead of 32-47%, spectral
+centroid ~3 kHz instead of ~9-10 kHz. Distance and bedding absorption
+plausibly eat the top octaves, which would mean the original
+2000-16000 Hz band is largely listening where the real signal isn't.
+``low_hz``/``high_hz`` are therefore caller-supplied so the band can be
+swept against real data (``tools/sweep_band.py``) rather than assumed, and
+every emitted :class:`EventCandidate` records the band it came from.
+
 ## Why a causal (not zero-phase) filter
 
 ``src.features.spectral.high_pass_filter`` uses ``sosfiltfilt`` (zero-phase,
@@ -58,7 +70,7 @@ HYSTERESIS_EXIT_RATIO = 0.6
 MERGE_GAP_S = 0.5
 DEFAULT_MIN_EVENT_DURATION_S = 0.4
 DEFAULT_LOW_HZ = 2000.0
-HIGH_HZ_CAP = 16000.0
+DEFAULT_HIGH_HZ = 16000.0
 HIGH_HZ_NYQUIST_MARGIN = 0.95
 NARROW_BAND_WARNING_HZ = 6000.0
 MAD_FLOOR = 1e-6  # linear amplitude; prevents threshold collapsing to the median on near-silent audio
@@ -67,38 +79,64 @@ FILTER_ORDER = 4
 
 @dataclass(frozen=True)
 class GateBand:
-    """The frequency band actually used for one sample rate."""
+    """The frequency band actually used for one sample rate.
+
+    ``low_hz``/``high_hz`` are the *effective* edges after Nyquist capping,
+    not necessarily what the caller requested — ``requested_high_hz`` keeps
+    the original ask so a tool can tell the user their 16 kHz upper edge was
+    silently reduced on a low-sample-rate file.
+    """
 
     low_hz: float
     high_hz: float
     narrow_band_warning: bool
+    requested_high_hz: float
 
     @property
     def mid_hz(self) -> float:
+        """Split point between the band's lower and upper half.
+
+        This is what ``EventCandidate.band_ratio_high`` is measured against,
+        so it moves with the band: narrowing the band to 1000-6000 Hz makes
+        the ratio describe 3500-6000 Hz, not the ~9 kHz split the default
+        2000-16000 Hz band implies.
+        """
         return (self.low_hz + self.high_hz) / 2.0
 
+    @property
+    def high_hz_was_capped(self) -> bool:
+        return self.high_hz < self.requested_high_hz
 
-def resolve_band(sample_rate: int, low_hz: float = DEFAULT_LOW_HZ) -> GateBand:
+
+def resolve_band(
+    sample_rate: int, low_hz: float = DEFAULT_LOW_HZ, high_hz: float = DEFAULT_HIGH_HZ
+) -> GateBand:
     """Pick the gate's frequency band for a given sample rate.
 
-    ``high_hz`` is capped at both 16 kHz and 95% of Nyquist, whichever is
-    lower — the same margin ``src.features.spectral`` implicitly assumes
-    by never analyzing all the way to Nyquist.
+    The requested ``high_hz`` is additionally capped at 95% of Nyquist — the
+    same margin ``src.features.spectral`` implicitly assumes by never
+    analyzing all the way to Nyquist.
 
     Raises:
-        ValueError: if ``low_hz`` doesn't leave any usable band at this
-            sample rate (too low to be a meaningful bruxism-detection
-            band — needs roughly sample_rate > ~4.2 kHz for the default
-            2 kHz low edge).
+        ValueError: if ``high_hz <= low_hz`` as requested, or if Nyquist
+            capping leaves no usable band at this sample rate (the default
+            2 kHz low edge needs roughly sample_rate > ~4.2 kHz).
     """
-    nyquist = sample_rate / 2.0
-    high_hz = min(HIGH_HZ_CAP, nyquist * HIGH_HZ_NYQUIST_MARGIN)
     if high_hz <= low_hz:
+        raise ValueError(f"ย่านความถี่ไม่ถูกต้อง: high_hz ({high_hz:.0f}) ต้องมากกว่า low_hz ({low_hz:.0f})")
+    nyquist = sample_rate / 2.0
+    effective_high_hz = min(high_hz, nyquist * HIGH_HZ_NYQUIST_MARGIN)
+    if effective_high_hz <= low_hz:
         raise ValueError(
             f"sample rate {sample_rate} Hz ต่ำเกินไปสำหรับย่าน {low_hz:.0f} Hz ขึ้นไป "
-            f"(Nyquist * {HIGH_HZ_NYQUIST_MARGIN:.2f} = {high_hz:.0f} Hz)"
+            f"(Nyquist * {HIGH_HZ_NYQUIST_MARGIN:.2f} = {effective_high_hz:.0f} Hz)"
         )
-    return GateBand(low_hz=low_hz, high_hz=high_hz, narrow_band_warning=high_hz < NARROW_BAND_WARNING_HZ)
+    return GateBand(
+        low_hz=low_hz,
+        high_hz=effective_high_hz,
+        narrow_band_warning=(effective_high_hz - low_hz) < NARROW_BAND_WARNING_HZ,
+        requested_high_hz=high_hz,
+    )
 
 
 @dataclass
@@ -111,8 +149,16 @@ class EventCandidate:
     peak_rms_db: float
     mean_rms_db: float
     snr_above_floor_db: float
-    band_ratio_high: float  # energy in the upper half of the gate band / energy in the whole band
+    band_ratio_high: float  # energy above band_mid_hz / energy in the whole gate band
     segment_file: str
+    # The detection settings this event came out of, carried per-row so two
+    # runs over the same night (different band or k) stay comparable after
+    # the fact — a bare candidates.csv otherwise says nothing about how it
+    # was produced. These are the *effective* values after Nyquist capping.
+    band_low_hz: float
+    band_high_hz: float
+    band_mid_hz: float
+    gate_k: float
 
 
 @dataclass
@@ -179,12 +225,13 @@ class EnergyGate:
         k: float = DEFAULT_K,
         min_duration_s: float = DEFAULT_MIN_EVENT_DURATION_S,
         band_low_hz: float = DEFAULT_LOW_HZ,
+        band_high_hz: float = DEFAULT_HIGH_HZ,
     ):
         self.sample_rate = sample_rate
         self.session_id = session_id
         self.k = k
         self.min_duration_s = min_duration_s
-        self.band = resolve_band(sample_rate, band_low_hz)
+        self.band = resolve_band(sample_rate, band_low_hz, band_high_hz)
 
         self._sos_full = sp_signal.butter(
             FILTER_ORDER, [self.band.low_hz, self.band.high_hz], btype="bandpass", fs=sample_rate, output="sos"
@@ -371,4 +418,8 @@ class EnergyGate:
             snr_above_floor_db=mean_rms_db - raw.floor_db,
             band_ratio_high=band_ratio_high,
             segment_file=raw.segment_file,
+            band_low_hz=self.band.low_hz,
+            band_high_hz=self.band.high_hz,
+            band_mid_hz=self.band.mid_hz,
+            gate_k=self.k,
         )

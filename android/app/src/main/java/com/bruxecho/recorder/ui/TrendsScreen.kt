@@ -38,7 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bruxecho.recorder.R
 import com.bruxecho.recorder.domain.DemoModeState
-import com.bruxecho.recorder.domain.MockDetectionRepository
+import com.bruxecho.recorder.domain.DetectionRepositoryProvider
 import com.bruxecho.recorder.domain.NightSummary
 import com.bruxecho.recorder.ui.theme.Accent
 import com.bruxecho.recorder.ui.theme.AccentDim
@@ -52,7 +52,7 @@ import java.time.ZoneId
 @Composable
 fun TrendsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    val repository = remember { MockDetectionRepository(context) }
+    val repository = remember { DetectionRepositoryProvider.get(context) }
     var rangeDays by remember { mutableStateOf(14) }
     var nights by remember { mutableStateOf<List<NightSummary>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
