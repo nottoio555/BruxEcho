@@ -19,8 +19,8 @@ against the clips. Findings:
 - The recorder saved **m4a (AAC)** despite a `.wav` extension, and the
   OS/app's voice-call DSP pipeline stripped almost everything above 8 kHz.
 - Once high-pass filtered (300 Hz, to remove ambient low-frequency room
-  noise that otherwise swamps every energy-ratio number — see README "ทำไม
-  ต้อง high-pass filter"), the **8-16 kHz band measured 15.6 dB SNR**
+  noise that otherwise swamps every energy-ratio number — see docs/tools.md
+  "ทำไมต้อง high-pass filter"), the **8-16 kHz band measured 15.6 dB SNR**
   between grinding and silence — the band that separates the target signal
   from noise best, and exactly the band a voice-tuned pipeline discards.
 - Model implication: **YAMNet (16 kHz native) can't see this band; PANNs
@@ -53,8 +53,8 @@ wins): `UNPROCESSED` → `CAMCORDER` → `MIC`. Verified on a Samsung Galaxy A55
 not available on that device at all (not a bug — some OEMs simply don't
 expose it; recorded as `effects_unavailable` in `session.json`).
 
-Full technical rationale and Samsung-specific battery/DSP notes are in
-[`android/README` section of the top-level README](README.md#แอป-android).
+Samsung battery setup is in the [README](README.md#แอป-android); technical
+notes are in [`docs/android.md`](docs/android.md).
 
 ## Sprint 3: energy gate + external-file import
 
@@ -605,6 +605,10 @@ detector reads the original segments.
 - `android/` — the recording app (Kotlin, Jetpack Compose, `AudioRecord`
   only — never `MediaRecorder`). See its README section for build/install/
   pull commands and the Samsung battery-settings steps.
+- `docs/` — Thai reader docs split out of the README: `tools.md` (CLI manual),
+  `development-log.md` (per-sprint history), `android.md`,
+  `recording-protocol.md`. The README stays a short overview for the course
+  advisor; put new detail here, not there.
 
 ## Commands
 

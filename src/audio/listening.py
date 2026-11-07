@@ -31,7 +31,7 @@ from __future__ import annotations
 import numpy as np
 from scipy.signal import butter, sosfiltfilt
 
-# 300 Hz, matching the project's long-standing high-pass choice (see README
+# 300 Hz, matching the project's long-standing high-pass choice (see docs/tools.md
 # "ทำไมต้อง high-pass filter"). Real sleep bruxism keeps 90% of its energy
 # inside 683-5104 Hz, so nothing audible is lost — and leaving 120-300 Hz in
 # cost most of the headroom, because peaks down there kept triggering the
